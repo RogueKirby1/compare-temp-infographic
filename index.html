@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>What half a degree changes</title>
+<style>
+  :root { --bg: #fbfaf7; --fg: #1d2630; --muted: #5b6672; --grid: #d8dde2; --acc: #2f7d8c; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #14191f; --fg: #e8ecef; --muted: #9aa5b0; --grid: #2b333c; --acc: #5bb5c6; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--fg);
+         font: 17px/1.5 Georgia, "Times New Roman", serif; }
+  .wrap { max-width: 800px; margin: 0 auto; }
+  h1 { font-size: 1.5rem; line-height: 1.25; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 14px; font-size: .95rem; }
+
+  .seg { display: inline-flex; border: 1.5px solid var(--fg); border-radius: 8px; overflow: hidden; margin-bottom: 6px; }
+  .seg input { position: absolute; opacity: 0; }
+  .seg label { padding: 8px 22px; cursor: pointer; font-weight: 700; font-size: 1.1rem; }
+  .seg input:checked + label { background: var(--fg); color: var(--bg); }
+  .seg input:focus-visible + label { outline: 3px solid var(--acc); outline-offset: -3px; }
+
+  .row { display: grid; grid-template-columns: minmax(170px, 1fr) 2fr; gap: 8px 18px; padding: 16px 0; border-top: 1px solid var(--grid); }
+  .row h2 { grid-column: 1 / -1; margin: 0; font-size: 1rem; color: var(--muted); font-weight: 400; }
+  .num { font-size: 2.3rem; line-height: 1.1; font-weight: 700; }
+  .unit { color: var(--muted); font-size: .9rem; }
+  .grid { display: grid; gap: 6px; align-content: start; }
+  #coral { grid-template-columns: repeat(5, 1fr); max-width: 340px; }
+  #fish  { grid-template-columns: repeat(6, 1fr); max-width: 420px; }
+  #ice   { grid-template-columns: repeat(10, 1fr); gap: 3px; max-width: 420px; }
+  .cell { aspect-ratio: 1; border: 1.5px dashed transparent; border-radius: 6px; transition: opacity .3s; }
+  .cell img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .cell.empty { border-color: var(--grid); }
+  .cell.empty img { visibility: hidden; }
+  .note { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: .8rem; }
+  .ctx { font-size: .9rem; color: var(--muted); margin: 8px 0 0; }
+  .src { color: var(--muted); font-size: .8rem; margin-top: 12px; border-top: 1px solid var(--grid); padding-top: 10px; }
+  @media (max-width: 560px) { .row { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>What half a degree changes</h1>
+  <p class="sub">Switch between two worlds: one where warming levels off at 1.5°C above 1850–1900, and one where it reaches 2.0°C.</p>
+
+  <div class="seg" role="radiogroup" aria-label="Warming level">
+    <input type="radio" name="lvl" id="r15" value="1.5" checked><label for="r15">1.5°C</label>
+    <input type="radio" name="lvl" id="r20" value="2"><label for="r20">2.0°C</label>
+  </div>
+  <p class="ctx">These are not forecasts for a particular year. When the IPCC wrote its 2018 report, warming was about 1°C, and it said 1.5°C would likely arrive between 2030 and 2052 at the then-current rate.</p>
+
+  <section class="row" aria-live="polite">
+    <h2>Coral reefs</h2>
+    <div><div class="num" id="coral-n"></div><div class="unit">of reefs lost</div></div>
+    <div class="grid" id="coral" role="img"></div>
+    <p class="note">Each icon is 5% of reefs. At 1.5°C the report gives a range of 70–90% lost, and the icons show the middle of that range (80%).</p>
+  </section>
+
+  <section class="row" aria-live="polite">
+    <h2>Arctic Ocean in summer</h2>
+    <div><div class="num" id="ice-n"></div><div class="unit" id="ice-u"></div></div>
+    <div class="grid" id="ice" role="img" aria-label="100 squares, each one summer. Ice-free summers are marked."></div>
+    <p class="note">Each square is one summer in a century of steady warming. Placement is illustrative: the report gives how often, not which years.</p>
+  </section>
+
+  <section class="row" aria-live="polite">
+    <h2>Marine fish catch</h2>
+    <div><div class="unit" id="fish-p"></div><div class="num" id="fish-n"></div><div class="unit">million tonnes of yearly catch lost</div></div>
+    <div class="grid" id="fish" role="img" aria-label="Dead fish icons, each representing half a million tonnes of lost catch."></div>
+    <p class="note">Each fish is 0.5 million tonnes lost per year. Empty outlines mean no extra loss shown, not healthy stocks. This comes from one global fishery model cited in the report.</p>
+  </section>
+
+  <section class="row" aria-live="polite">
+    <h2>Sea level</h2>
+    <div><div class="num" id="sea-n"></div><div class="unit" id="sea-u"></div></div>
+  </section>
+
+  <p class="src">Source: IPCC, <i>Global Warming of 1.5°C</i> (2018), Summary for Policymakers. Warming levels are relative to 1850–1900. Illustrations by [your name].</p>
+</div>
+
+<script>
+const ART = "art/";                    // folder that holds your SVG files
+const $ = s => document.querySelector(s);
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const src = n => `${ART}${n}.svg`;
+
+// Build a grid of empty cells, each holding one <img>
+function grid(sel, n) {
+  const el = $(sel);
+  return Array.from({ length: n }, () => {
+    const cell = document.createElement("div"); cell.className = "cell";
+    const im = new Image(); im.alt = ""; cell.append(im); el.append(cell);
+    return { cell, im };
+  });
+}
+const coral = grid("#coral", 20), ice = grid("#ice", 100), fish = grid("#fish", 6);
+
+const ALIVE = [3, 8, 11, 14];                    // which coral icons survive at 1.5°C (4 of 20 = the middle of the 70–90% range)
+const ICEOFF = [4, 7, 2, 9, 5, 0, 8, 3, 6, 1];   // which summer in each decade is ice-free
+const cur = { ice: 1, fish: 1.5 };
+
+// Animated counter
+function count(el, from, to, fmt) {
+  if (reduce || from === to) { el.textContent = fmt(to); return; }
+  const t0 = performance.now();
+  const step = t => {
+    const k = Math.min(1, (t - t0) / 700);
+    el.textContent = fmt(from + (to - from) * (1 - (1 - k) ** 3));
+    if (k < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+const pop = cells => { if (!reduce) cells.forEach((c, i) =>
+  c.cell.animate([{ transform: "scale(.7)" }, { transform: "none" }], { duration: 320, delay: i * 12, fill: "backwards" })); };
+
+function set(level) {
+  const early = level === 1.5;
+
+  // Coral: healthy vs bleached
+  const solid = early ? ALIVE : [];
+  coral.forEach((c, i) => {
+    const live = solid.includes(i);
+    c.im.src = src(`coral-${i % 4 + 1}${live ? "" : "-dead"}`);
+  });
+  $("#coral-n").textContent = early ? "70–90%" : ">99%";
+  $("#coral").setAttribute("aria-label", `20 coral icons: ${solid.length} healthy, ${20 - solid.length} bleached.`);
+
+  // Arctic summer ice: one ice-free summer vs at least one per decade
+  const free = new Set((early ? [5] : ICEOFF.map((_, r) => r)).map(r => r * 10 + ICEOFF[r]));
+  ice.forEach((c, i) => c.im.src = src(free.has(i) ? "no-ice" : "ice"));
+  count($("#ice-n"), cur.ice, early ? 1 : 10, v => Math.round(v) + (!early && v >= 10 ? "+" : ""));
+  cur.ice = early ? 1 : 10;
+  $("#ice-u").textContent = early ? "ice-free summer per century" : "ice-free summers per century (at least one per decade)";
+
+  // Fisheries: dead fish = lost catch (no "alive" fish, to avoid implying a share of total catch)
+  fish.forEach((c, i) => {
+    const on = i < (early ? 3 : 6);
+    c.cell.classList.toggle("empty", !on);
+    if (on) c.im.src = src(`fish-${i % 3 + 1}-dead`);
+  });
+  count($("#fish-n"), cur.fish, early ? 1.5 : 3, v => v.toFixed(1));
+  cur.fish = early ? 1.5 : 3;
+  $("#fish-p").textContent = early ? "about" : "more than";
+
+  // Sea level (numbers only)
+  $("#sea-n").textContent = early ? "26–77 cm" : "~10 cm more";
+  $("#sea-u").textContent = early ? "of sea-level rise by 2100, compared with 1986–2005" : "sea-level rise by 2100 than at 1.5°C";
+
+  [coral, ice, fish].forEach(pop);
+}
+
+document.querySelectorAll("input[name=lvl]").forEach(r => r.addEventListener("change", () => set(+r.value)));
+set(1.5);
+</script>
+</body>
+</html>
